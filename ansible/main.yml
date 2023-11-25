@@ -1,0 +1,37 @@
+- hosts: aws_ec2
+  tasks: 
+    - name: install software
+      become: true
+      apt:
+        name: nginx
+    - name: add backend user
+      become: true
+      user:
+        name: backend
+    - name: clone get repo
+      git:
+        repo: https://github.com/timoguic/acit4640-py-mysql
+        dest: /tmp/source-code
+        update: yes
+    - name: create frontend directory
+      become: true
+      file:
+        path: /frontend
+        state: directory
+        owner: "{{ansible_ssh_user}}"
+
+    - name: set up frontend files
+      copy: 
+        src: /temp/source-code/frontend/index.html
+        dest: /frontend/index.html
+        remote_src: yes
+        
+    - name: copy nginx to instance
+      copy: 
+        src: nginx-default
+        dest: /etc/nginx/sites-available/default
+    
+
+
+
+

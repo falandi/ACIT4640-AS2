@@ -16,6 +16,7 @@ resource "aws_key_pair" "a02_keypair" {
   public_key = file("/home/faefa/.ssh/as2_key.pub") 
 }
 
+
 resource "aws_subnet" "a02_pub_subnet" {
   vpc_id     = aws_vpc.a02_vpc.id
   cidr_block = "192.168.2.0/24"
@@ -226,8 +227,9 @@ resource "aws_instance" "a02_backend" {
   key_name  = aws_key_pair.a02_keypair.id
 
    vpc_security_group_ids = [
-    aws_security_group.a02_priv_sg.id
+    aws_security_group.a02_pub_sg.id 
   ]
+
 
   tags = {
     Name = "AS2_Backend"

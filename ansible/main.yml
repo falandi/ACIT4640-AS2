@@ -1,18 +1,156 @@
-- hosts: aws_ec2
-  tasks: 
-    - name: install software
-      become: true
-      apt:
-        name: nginx
+- name: Run Task on AS2_Backend
+  hosts: _AS2_Backend  
+  become: yes 
+  tasks:
     - name: add backend user
       become: true
       user:
         name: backend
-    - name: clone get repo
+
+    - name: clone git repo
       git:
         repo: https://github.com/timoguic/acit4640-py-mysql
         dest: /tmp/source-code
         update: yes
+
+    - name: create backend directory
+      become: true
+      file:
+        path: /backend
+        state: directory
+        owner: "{{ansible_ssh_user}}"
+    
+    - name: set up backend files
+      copy: 
+        src: /tmp/source-code/backend
+        dest: /
+        remote_src: yes
+
+  
+- name: Run Task on AS2_Database
+  hosts: _AS2_Database
+  become: yes  # Add this if you need to escalate privileges
+  tasks:
+    - name: Install MySQL packages
+      package:
+        name: "{{ item }}"
+        state: present
+      with_items:
+        - mysql-server
+        - python3-mysqldb  
+      when: ansible_os_family == 'Debian' or ansible_os_family == 'RedHat'
+
+    - name: Start MySQL service
+      service:
+        name: mysql
+        state: started
+        enabled: yes
+      when: ansible_os_family == 'Debian' or ansible_os_family == 'RedHat'
+
+    - name: Install MySQL Python package
+      apt:
+        name: python3-mysqldb
+        state: present
+      when: ansible_distribution == 'Ubuntu'
+
+
+    - name: create MySQL User
+      mysql_user:
+        name: faefa
+        password: password123
+        priv: "*.*:ALL"
+        state: present
+        host: "localhost"
+      
+    - name: Create MySQL Database
+      mysql_db:
+        name: example
+        state: present
+    
+    - name: Create the table
+      community.mysql.mysql_query:
+        login_user: faefa
+        login_password: password123
+        login_host: "localhost"
+        login_db: example
+        query: 
+          "CREATE TABLE IF NOT EXISTS pets (
+            pet_id INT,
+            name VARCHAR(255),
+            birthdate DATE
+          );"
+
+    - name: Insert data into table
+      community.mysql.mysql_query:
+        login_user: faefa
+        login_password: password123
+        login_host: "localhost"
+        login_db: example
+        query: 
+          "INSERT INTO pets (pet_id, name, birthdate)
+          VALUES
+          (1, 'Rover', '2020-01-06'),
+          (2, 'Luna', '2016-07-02'),
+          (3, 'Spot', '2018-11-13');"
+
+
+    - name: Ensure bind-address is set to 0.0.0.0
+      lineinfile:
+        path: /etc/mysql/mysql.conf.d/mysqld.cnf
+        regexp: '^bind-address'
+        line: 'bind-address = 0.0.0.0'
+
+    - name: grant access from remote host
+      mysql_user:
+        name: faefa
+        host: _AS2_Backend
+        password: password123
+        priv: "*.*:ALL"
+        state: present
+
+    - name: grant MySQL Privileges
+      mysql_user:
+        name: faefa
+        host: _AS2_Backend 
+        priv: "example.*:ALL"
+        password: password123
+        state: present
+
+    - name: restart mysql
+      service:
+        name: mysql
+        state: restarted
+
+
+    - name: Install UFW
+      apt:
+        name: ufw
+        state: present
+      when: ansible_distribution == 'Ubuntu'
+
+    - name: Allow SSH
+      ufw:
+        rule: allow
+        port: 22
+
+    - name: Enable UFW
+      ufw:
+        state: enabled
+        policy: allow
+
+    - name: Reload UFW
+      command: ufw reload
+
+- name: Run Task on AS2_Web_Server
+  hosts: _AS2_Web_Server
+  become: yes 
+  tasks:
+    - name: clone git repo
+      git:
+        repo: https://github.com/timoguic/acit4640-py-mysql
+        dest: /tmp/source-code
+        update: yes
+    
     - name: create frontend directory
       become: true
       file:
@@ -22,15 +160,50 @@
 
     - name: set up frontend files
       copy: 
-        src: /temp/source-code/frontend/index.html
+        src: /tmp/source-code/frontend/index.html
         dest: /frontend/index.html
         remote_src: yes
-        
-    - name: copy nginx to instance
+
+
+    - name: Install Nginx
+      ansible.builtin.package:
+        name: nginx
+        state: present
+
+    - name: Start Nginx service
+      ansible.builtin.service:
+        name: nginx
+        state: started
+        enabled: yes  # Auto-start Nginx on system boot
+
+    - name: copy nginx conf to instance
+      become: true
       copy: 
-        src: nginx-default
+        src: /etc/nginx/sites-available/nginx-default
         dest: /etc/nginx/sites-available/default
-    
+        
+
+    - name:  restart nginx after changes
+      become: true
+      systemd:
+        name: nginx
+        state: restarted
+
+    - name: Update apt cache (for Ubuntu)
+      apt:
+        update_cache: yes
+      when: ansible_os_family == 'Debian'
+
+
+
+
+
+
+
+
+
+
+          
 
 
 

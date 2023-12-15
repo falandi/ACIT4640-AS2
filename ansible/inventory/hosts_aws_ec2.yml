@@ -5,3 +5,7 @@ reigons:
 
 compose:
 ansible-host: public_ip_address
+
+keyed_groups:
+
+  - key: tags.Name
